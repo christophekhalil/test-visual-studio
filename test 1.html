@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Ocean Scene</title>
+    <!-- Import p5.js and the p5.dom library for the slider -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+    <style>
+        /* Basic CSS to make the canvas fill the window */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevents scrollbars */
+        }
+    </style>
+</head>
+<body>
+<script>
+// ===================================================
+// === GLOBAL VARIABLES & CONFIGURATION
+// ===================================================
+let storyStep = 1;
+
+// UI Elements
+let slider;
+let homeButton, resetButton;
+let knob;
+
+// Scene
+let vanishingPoint;
+const horizonY = 0.2; // 20% from the top
+
+// Fish Flocking (Boids)
+let flock = [];
+const numBoids = 150;
+
+// ===================================================
+// === P5.JS SETUP & MAIN DRAW LOOP
+// ===================================================
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    vanishingPoint = createVector(width / 2, height * horizonY);
+
+    // --- Create UI Elements ---
+    createUI();
+    
+    // --- Initialize the flock of fish ---
+    for (let i = 0; i < numBoids; i++) {
+        // Start fish in the ocean area
+        flock.push(new Boid(random(width), random(height * horizonY, height)));
+    }
+}
+
+function draw() {
+    // Update story step from slider
+    storyStep = slider.value();
+
+    // --- Drawing Layers (from back to front) ---
+    drawBackground();
+    drawSeabed();
+    drawWindmill();
+
+    // --- Run and draw the flocking simulation ---
+    runFlock();
+    
+    // --- Draw UI on top of everything ---
+    drawUI();
+
+    // Show/hide knob based on the story step
+    knob.updateVisibility(storyStep === 4);
+    if (knob.visible) {
+        knob.display();
+    }
+}
+
+// ===================================================
+// === SCENE & BACKGROUND DRAWING FUNCTIONS
+// ===================================================
+
+function drawBackground() {
+    // Sky
+    background(135, 206, 235); // Light sky blue
+    // Ocean
+    fill(0, 105, 148); // Deep ocean blue
+    noStroke();
+    rect(0, height * horizonY, width, height * (1 - horizonY));
+
+    // Mountains
+    fill(110, 120, 130);
+    beginShape(); // Left mountain
+    vertex(0, height * horizonY);
+    vertex(width * 0.1, height * 0.15);
+    vertex(width * 0.2, height * 0.1);
+    vertex(width * 0.3, height * horizonY);
+    endShape(CLOSE);
+    
+    beginShape(); // Right mountain
+    vertex(width, height * horizonY);
+    vertex(width * 0.9, height * 0.17);
+    vertex(width * 0.8, height * 0.12);
+    vertex(width * 0.7, height * horizonY);
+    endShape(CLOSE);
+}
+
+function drawSeabed() {
+    stroke(0, 80, 120, 150);
+    strokeWeight(2);
+    // Draw perspective lines on the seabed
+    for (let i = 0; i < width; i += 50) {
+        line(i, height, vanishingPoint.x, vanishingPoint.y);
+    }
+}
+
+function drawWindmill() {
+    if (storyStep < 2) return; // Don't draw if before step 2
+
+    const baseWidth = 150;
+    const structureHeight = height * 0.6;
+
+    // --- Draw Base Structure (from step 2 onwards) ---
+    push();
+    translate(vanishingPoint.x, height); // Start drawing from bottom center
+    stroke(60);
+    strokeWeight(4);
+    fill(80);
+    
+    // Use perspective lines for the base
+    line( -baseWidth / 2, 0, -baseWidth / 4, -structureHeight);
+    line( baseWidth / 2, 0, baseWidth / 4, -structureHeight);
+    rectMode(CORNERS);
+    rect(-baseWidth/4, -structureHeight, baseWidth/4, -structureHeight-10);
+    pop();
+
+    // --- Draw Disturbance Particles (step 3 only) ---
+    if (storyStep === 3) {
+        for(let i = 0; i < 5; i++){
+            fill(255, 255, 255, random(50, 150));
+            noStroke();
+            let x = random(width/2 - 50, width/2 + 50);
+            let y = random(height*0.5, height * 0.8);
+            circle(x, y, random(5, 15));
+        }
+    }
+
+    // --- Draw Protective Cover (step 4 only) ---
+    if (storyStep === 4) {
+        push();
+        translate(vanishingPoint.x, height - structureHeight);
+        noFill();
+        strokeWeight(10);
+        stroke(0, 255, 255, 150); // Cyan color for the shield
+        // The arc length is proportional to the knob's rotation
+        let angle = map(knob.value, 0, 1, 0, TWO_PI);
+        arc(0, 0, 150, 150, -PI/2, -PI/2 + angle);
+        pop();
+    }
+}
+
+
+// ===================================================
+// === UI DRAWING AND MANAGEMENT
+// ===================================================
+
+function createUI() {
+    // --- Slider ---
+    slider = createSlider(1, 4, 1, 1); // Min, Max, Start, Step
+    slider.position(width - 220, height - 45);
+    slider.style('width', '180px');
+    
+    // --- Buttons ---
+    homeButton = createButton('Home');
+    homeButton.position(width - 80, 20);
+    homeButton.mousePressed(resetSketch);
+
+    resetButton = createButton('Reset');
+    resetButton.position(20, 20);
+    resetButton.mousePressed(resetSketch);
+
+    // --- Knob ---
+    knob = new Knob(width - 280, height - 45, 30);
+}
+
+function drawUI() {
+    // --- Bottom Bar ---
+    const barHeight = height * 0.05;
+    fill(0, 0, 0, 100);
+    noStroke();
+    rect(0, height - barHeight - 10, width, barHeight);
+
+    // --- Information Text ---
+    let infoText = "";
+    switch(storyStep) {
+        case 1: infoText = ""; break;
+        case 2: infoText = ""; break;
+        case 3: infoText = ""; break;
+        case 4: infoText = ""; break;
+    }
+    fill(255);
+    textSize(16);
+    textAlign(CENTER, CENTER);
+    text(infoText, width / 2, height - barHeight / 2 - 10);
+}
+
+function resetSketch() {
+    slider.value(1);
+    knob.reset();
+}
+
+
+// ===================================================
+// === FLOCKING SIMULATION (BOIDS)
+// ===================================================
+
+function runFlock() {
+    for (let boid of flock) {
+        boid.run(flock);
+    }
+}
+
+class Boid {
+    constructor(x, y) {
+        this.position = createVector(x, y);
+        this.velocity = p5.Vector.random2D();
+        this.velocity.setMag(random(2, 4));
+        this.acceleration = createVector();
+        this.maxForce = 0.2;
+        this.maxSpeed = 4;
+    }
+
+    // Main method: calls all other methods
+    run(boids) {
+        this.flock(boids);
+        this.update();
+        this.borders();
+        this.render();
+    }
+
+    update() {
+        this.velocity.add(this.acceleration);
+        this.velocity.limit(this.maxSpeed);
+        this.position.add(this.velocity);
+        this.acceleration.mult(0); // Reset acceleration
+    }
+
+    applyForce(force) {
+        this.acceleration.add(force);
+    }
+
+    // The flocking behavior
+    flock(boids) {
+        let sep = this.separation(boids);
+        let ali = this.align(boids);
+        let coh = this.cohesion(boids);
+
+        // Weighting the forces
+        sep.mult(2.5);
+        ali.mult(1.0);
+        coh.mult(1.0);
+
+        this.applyForce(sep);
+        this.applyForce(ali);
+        this.applyForce(coh);
+
+        // Step 3: Disturbance behavior
+        if (storyStep === 3) {
+            let fleePoint = createVector(width / 2, height * 0.7);
+            let fleeForce = this.flee(fleePoint);
+            fleeForce.mult(3.0); // Make the flee force strong
+            this.applyForce(fleeForce);
+            this.maxSpeed = 7; // Swim faster
+        } else {
+            this.maxSpeed = 4; // Normal speed
+        }
+    }
+
+    // Wraparound screen edges
+    borders() {
+        if (this.position.x < -10) this.position.x = width + 10;
+        if (this.position.y < height * horizonY) this.position.y = height + 10;
+        if (this.position.x > width + 10) this.position.x = -10;
+        if (this.position.y > height + 10) this.position.y = height*horizonY;
+    }
+
+    // Draw the boid
+    render() {
+        // Size decreases with depth (closer to horizon)
+        let size = map(this.position.y, height * horizonY, height, 2, 12);
+        let angle = this.velocity.heading() + PI / 2;
+        
+        push();
+        translate(this.position.x, this.position.y);
+        rotate(angle);
+        fill(200, 200, 220);
+        stroke(150);
+        beginShape();
+        vertex(0, -size);
+        vertex(-size / 2, size);
+        vertex(size / 2, size);
+        endShape(CLOSE);
+        pop();
+    }
+
+    // --- Flocking Rules ---
+    seek(target) {
+        let desired = p5.Vector.sub(target, this.position);
+        desired.setMag(this.maxSpeed);
+        let steer = p5.Vector.sub(desired, this.velocity);
+        steer.limit(this.maxForce);
+        return steer;
+    }
+    
+    flee(target) {
+        return this.seek(target).mult(-1);
+    }
+
+    separation(boids) {
+        let desiredSeparation = 25.0;
+        let steer = createVector(0, 0);
+        let count = 0;
+        for (let other of boids) {
+            let d = p5.Vector.dist(this.position, other.position);
+            if ((d > 0) && (d < desiredSeparation)) {
+                let diff = p5.Vector.sub(this.position, other.position);
+                diff.normalize();
+                diff.div(d);
+                steer.add(diff);
+                count++;
+            }
+        }
+        if (count > 0) {
+            steer.div(count);
+        }
+        if (steer.mag() > 0) {
+            steer.setMag(this.maxSpeed);
+            steer.sub(this.velocity);
+            steer.limit(this.maxForce);
+        }
+        return steer;
+    }
+
+    align(boids) {
+        let neighborDist = 50;
+        let sum = createVector(0, 0);
+        let count = 0;
+        for (let other of boids) {
+            let d = p5.Vector.dist(this.position, other.position);
+            if ((d > 0) && (d < neighborDist)) {
+                sum.add(other.velocity);
+                count++;
+            }
+        }
+        if (count > 0) {
+            sum.div(count);
+            sum.setMag(this.maxSpeed);
+            let steer = p5.Vector.sub(sum, this.velocity);
+            steer.limit(this.maxForce);
+            return steer;
+        } else {
+            return createVector(0, 0);
+        }
+    }
+
+    cohesion(boids) {
+        let neighborDist = 50;
+        let sum = createVector(0, 0);
+        let count = 0;
+        for (let other of boids) {
+            let d = p5.Vector.dist(this.position, other.position);
+            if ((d > 0) && (d < neighborDist)) {
+                sum.add(other.position);
+                count++;
+            }
+        }
+        if (count > 0) {
+            sum.div(count);
+            return this.seek(sum);
+        } else {
+            return createVector(0, 0);
+        }
+    }
+}
+
+
+// ===================================================
+// === KNOB CLASS & MOUSE INTERACTIONS
+// ===================================================
+class Knob {
+    constructor(x, y, size) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.value = 0; // 0.0 to 1.0
+        this.angle = -PI/2;
+        this.isDragging = false;
+        this.visible = false;
+    }
+
+    updateVisibility(isVisible) {
+        this.visible = isVisible;
+    }
+
+    handleDrag() {
+        if (!this.visible) return;
+        
+        let d = dist(mouseX, mouseY, this.x, this.y);
+        if (d < this.size / 2) {
+            this.isDragging = true;
+        }
+    }
+    
+    drag() {
+        if(this.isDragging) {
+            let dx = mouseX - pmouseX;
+            this.angle += dx * 0.05; // Sensitivity
+            this.angle = constrain(this.angle, -PI/2, PI*1.5); // Limit rotation
+            this.value = map(this.angle, -PI/2, PI*1.5, 0, 1);
+        }
+    }
+
+    stopDrag() {
+        this.isDragging = false;
+    }
+    
+    reset() {
+        this.angle = -PI/2;
+        this.value = 0;
+    }
+
+    display() {
+        push();
+        translate(this.x, this.y);
+        
+        // Base
+        fill(80);
+        stroke(50);
+        strokeWeight(2);
+        circle(0, 0, this.size);
+        
+        // Indicator
+        rotate(this.angle);
+        stroke(255);
+        strokeWeight(3);
+        line(0, 0, this.size/2 - 5, 0);
+        
+        pop();
+    }
+}
+
+function mousePressed() {
+    knob.handleDrag();
+}
+
+function mouseDragged() {
+    knob.drag();
+}
+
+function mouseReleased() {
+    knob.stopDrag();
+}
+
+// ===================================================
+// === RESPONSIVE DESIGN
+// ===================================================
+
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+    vanishingPoint.set(width / 2, height * horizonY);
+    
+    // Reposition UI
+    slider.position(width - 220, height - 45);
+    homeButton.position(width - 80, 20);
+    resetButton.position(20, 20);
+    knob.x = width - 280;
+    knob.y = height - 45;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Ocean Scene (Final Version)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
+</head>
+<body>
+<script>
+// ===================================================
+// === GLOBAL VARIABLES & CONFIGURATION
+// ===================================================
+let storyStep = 1;
+let slider, homeButton, resetButton;
+// MODIFIED: Two separate flocks
+let leftFlock = [];
+let rightFlock = [];
+const numBoids = 250;
+
+const WATER_LEVEL_RATIO = 0.45;
+
+// Color Palette
+const SKY_COLOR = '#E0F7FA';
+const WATER_COLOR = '#42A5F5';
+const DEEP_WATER_COLOR = '#1E88E5';
+const MOUNTAIN_COLOR = '#B0BEC5';
+const FISH_A_COLOR = '#455A64';
+const FISH_B_COLOR = '#78909C';
+
+// For dynamic central divider
+let noiseOffsetX = 0;
+
+// ===================================================
+// === P5.JS SETUP & MAIN DRAW LOOP
+// ===================================================
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    createUI();
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    
+    // Create fish for both flocks
+    for (let i = 0; i < numBoids; i++) {
+        const startY = random(waterLevel + 20, height - 20);
+        const type = (i < 160) ? 'A' : 'B';
+        
+        if (i % 2 === 0) { // Add to left flock
+            const startX = random(20, width / 2 - 50);
+            leftFlock.push(new Boid(startX, startY, type, 'left'));
+        } else { // Add to right flock
+            const startX = random(width / 2 + 50, width - 20);
+            rightFlock.push(new Boid(startX, startY, type, 'right'));
+        }
+    }
+}
+
+function draw() {
+    storyStep = slider.value();
+    noiseOffsetX += 0.002;
+
+    // Update state for both flocks
+    for(let boid of leftFlock) boid.updateState(leftFlock);
+    for(let boid of rightFlock) boid.updateState(rightFlock);
+    
+    drawBackground();
+    drawWavyDivider();
+    
+    // Render both flocks
+    for(let boid of leftFlock) boid.render();
+    for(let boid of rightFlock) boid.render();
+    
+    drawUI();
+}
+
+// ===================================================
+// === SCENE & BACKGROUND DRAWING FUNCTIONS
+// ===================================================
+
+function drawBackground() {
+    background(SKY_COLOR);
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    fill(MOUNTAIN_COLOR); noStroke();
+    beginShape(); vertex(0, waterLevel); vertex(width*0.1, height*0.3); vertex(width*0.25, height*0.2); vertex(width*0.4, waterLevel); endShape(CLOSE);
+    beginShape(); vertex(width, waterLevel); vertex(width*0.9, height*0.25); vertex(width*0.7, height*0.15); vertex(width*0.6, waterLevel); endShape(CLOSE);
+    const c1=color(WATER_COLOR), c2=color(DEEP_WATER_COLOR);
+    for(let y=waterLevel; y<height; y++){ const inter=map(y,waterLevel,height,0,1); stroke(lerpColor(c1,c2,inter)); line(0,y,width,y); }
+}
+
+// MODIFIED: New function to draw the central barrier
+function drawWavyDivider() {
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    const waveWidth = width * 0.15; // How much the wave moves left and right
+    
+    noFill();
+    stroke(255, 255, 255, 20); // Very subtle, transparent white
+    strokeWeight(10);
+    
+    beginShape();
+    for(let y = waterLevel; y <= height; y += 10) {
+        // Use Perlin noise to make the x-position undulate
+        const wave = map(noise(y * 0.005, noiseOffsetX), 0, 1, -waveWidth / 2, waveWidth / 2);
+        vertex(width / 2 + wave, y);
+    }
+    endShape();
+}
+
+// ===================================================
+// === UI DRAWING AND MANAGEMENT
+// ===================================================
+
+function createUI() {
+    const sliderWidth = min(width * 0.4, 400);
+    slider = createSlider(1, 4, 1, 1);
+    slider.position(width/2 - sliderWidth/2, height - 45);
+    slider.style('width', `${sliderWidth}px`);
+    
+    homeButton = createButton('Home');
+    homeButton.position(width - 80, 20);
+    homeButton.mousePressed(resetSketch);
+    resetButton = createButton('Reset');
+    resetButton.position(20, 20);
+    resetButton.mousePressed(resetSketch);
+}
+
+function drawUI() {
+    const barHeight = height * 0.05;
+    fill(0, 0, 0, 100); noStroke();
+    rect(0, height - barHeight - 10, width, barHeight);
+    
+    drawSliderIncrements();
+
+    fill(255); textSize(16); textAlign(CENTER, CENTER);
+    text("", width / 2, height - barHeight / 2 - 10);
+}
+
+function drawSliderIncrements() {
+    noStroke();
+    fill(255, 255, 255, 50);
+    let sliderX = slider.x;
+    let sliderW = slider.width;
+    for (let i = 0; i < 4; i++) {
+        let x = sliderX + (i * sliderW / 3);
+        circle(x, slider.y + 4, 15);
+    }
+}
+
+function resetSketch() { slider.value(1); }
+
+// ===================================================
+// === FLOCKING SIMULATION (BOIDS)
+// ===================================================
+
+class Boid {
+    constructor(x, y, type, side) {
+        this.position = createVector(x, y);
+        // MODIFIED: Purely horizontal initial velocity
+        this.velocity = createVector(random([-1, 1]), 0);
+        this.acceleration = createVector();
+        this.type = type;
+        this.side = side; // 'left' or 'right'
+
+        if (this.type === 'A') { this.maxSpeed=3; this.maxForce=0.05; this.color=color(FISH_A_COLOR); this.velocity.setMag(random(1.5,3)); } 
+        else { this.maxSpeed=4.5; this.maxForce=0.07; this.color=color(FISH_B_COLOR); this.velocity.setMag(random(3,4.5)); }
+    }
+    
+    updateState(boids) { this.flock(boids); this.update(); this.borders(); }
+    
+    applyForce(force) { this.acceleration.add(force); }
+    
+    update() {
+        this.velocity.add(this.acceleration);
+        this.velocity.limit(this.maxSpeed);
+        this.position.add(this.velocity);
+        this.acceleration.mult(0);
+        // MODIFIED: Nullify any vertical velocity to ensure horizontal movement
+        this.velocity.y = 0;
+    }
+    
+    flock(boids) {
+        let sepM=(this.type==='A')?1.5:1.8, aliM=(this.type==='A')?1.0:0.8, cohM=(this.type==='A')?1.0:0.7;
+        this.applyForce(this.separation(boids).mult(sepM));
+        this.applyForce(this.align(boids).mult(aliM));
+        this.applyForce(this.cohesion(boids).mult(cohM));
+        
+        let baseSpeed=(this.type==='A')?3:4.5, agitatedSpeed=(this.type==='A')?6:7.5, agitatedSpeedMild=(this.type==='A')?4:5.5;
+        
+        // Flee point is just the center of the screen, horizontally
+        const fleePoint = createVector(width/2, this.position.y);
+        
+        if (storyStep === 2) {
+            this.maxSpeed = agitatedSpeedMild;
+            this.applyForce(this.flee(fleePoint).mult(0.5));
+        } else if (storyStep === 3) {
+            this.maxSpeed = agitatedSpeed;
+            this.applyForce(this.flee(fleePoint).mult(2.0));
+        } else if (storyStep === 4) {
+            // Placeholder for a potential future interaction
+            this.maxSpeed = agitatedSpeed;
+             this.applyForce(this.flee(fleePoint).mult(2.0));
+        } else {
+            this.maxSpeed = baseSpeed;
+        }
+    }
+    
+    // MODIFIED: Boundaries based on side
+    borders() {
+        const r = 20;
+        const waveWidth = width * 0.15;
+        // Get the current x position of the divider at this fish's y-level
+        const dividerX = width/2 + map(noise(this.position.y * 0.005, noiseOffsetX), 0, 1, -waveWidth/2, waveWidth/2);
+
+        if (this.side === 'left') {
+            if (this.position.x < r) {
+                this.position.x = r;
+                this.velocity.x *= -1;
+            }
+            if (this.position.x > dividerX - r) {
+                this.position.x = dividerX - r;
+                this.velocity.x *= -1;
+            }
+        } else { // Right side
+            if (this.position.x > width - r) {
+                this.position.x = width - r;
+                this.velocity.x *= -1;
+            }
+            if (this.position.x < dividerX + r) {
+                this.position.x = dividerX + r;
+                this.velocity.x *= -1;
+            }
+        }
+    }
+
+    render() {
+        const waterLevel = height * WATER_LEVEL_RATIO;
+        let size = map(this.position.y, waterLevel, height, 4, 12);
+        
+        if (this.type === 'B') size *= 0.7;
+
+        push();
+        translate(this.position.x, this.position.y);
+        rotate(this.velocity.heading());
+        noStroke();
+        fill(this.color);
+        const bodyWidth = size * 2.5;
+        const bodyHeight = size * 1.5;
+        ellipse(0, 0, bodyWidth, bodyHeight);
+        triangle(-bodyWidth/2, 0, -bodyWidth*0.9, -bodyHeight/2, -bodyWidth*0.9, bodyHeight/2);
+        pop();
+    }
+
+    seek(target) { let desired = p5.Vector.sub(target, this.position); desired.setMag(this.maxSpeed); let steer = p5.Vector.sub(desired, this.velocity); steer.limit(this.maxForce); return steer; }
+    flee(target) { return this.seek(target).mult(-1); }
+    separation(boids) { let d_sep=25.0, s=createVector(0,0), c=0; for(let o of boids){ let d=p5.Vector.dist(this.position,o.position); if((d>0)&&(d<d_sep)){s.add(p5.Vector.sub(this.position,o.position).normalize().div(d));c++;}} if(c>0) s.div(c); if(s.mag()>0) s.setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce); return s; }
+    align(boids) { let n_dist=50, sum=createVector(0,0), c=0; for(let o of boids){ if(o!==this && p5.Vector.dist(this.position, o.position)<n_dist){sum.add(o.velocity);c++;}} return c>0 ? sum.div(c).setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce):createVector(0,0);}
+    cohesion(boids) { let n_dist=50, sum=createVector(0,0), c=0; for(let o of boids){ if(o!==this && p5.Vector.dist(this.position, o.position)<n_dist){sum.add(o.position);c++;}} return c>0 ? this.seek(sum.div(c)):createVector(0,0);}
+}
+
+// ===================================================
+// === RESPONSIVE DESIGN
+// ===================================================
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+    const sliderWidth = min(width*0.4, 400);
+    slider.position(width/2 - sliderWidth/2, height - 45);
+    slider.style('width', `${sliderWidth}px`);
+    homeButton.position(width - 80, 20);
+    resetButton.position(20, 20);
+}
+</script>
+</body>
+</html>

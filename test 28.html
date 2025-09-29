@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Ocean Scene (Final Version)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
+</head>
+<body>
+<script>
+// ===================================================
+// === GLOBAL VARIABLES & CONFIGURATION
+// ===================================================
+let storyStep = 1;
+let slider, homeButton, resetButton, knob;
+let flock = [];
+const numBoids = 400;
+
+const WATER_LEVEL_RATIO = 0.45;
+
+// Color Palette
+const SKY_COLOR = '#E0F7FA';
+const WATER_COLOR = '#42A5F5';
+const DEEP_WATER_COLOR = '#1E88E5';
+const MOUNTAIN_COLOR = '#B0BEC5';
+const TURBINE_COLOR = '#B0BEC5';
+const SOCK_COLOR = '#66BB6A';
+const FISH_A_COLOR = '#455A64';
+const FISH_B_COLOR = '#78909C';
+
+let noiseOffsetX = 0;
+// Image variables for PNG replacement
+let imgSea, imgWindmillShaft, imgWindmillBlades, imgWindmillEngine, imgWindmillProtection;
+let imgAlgae, imgCoralReef, imgSunkenShip, imgKnob, imgSlider, imgFish01, imgFish02;
+
+// Image variable for sound wave PNG
+let imgSoundWave;
+
+function preload() {
+    imgSoundWave = loadImage('assets/sound_wave.png');
+    imgSea = loadImage('assets/sea.png');
+    imgWindmillShaft = loadImage('assets/windmill_shaft.png');
+    imgWindmillBlades = loadImage('assets/windmill_blades.png');
+    imgWindmillEngine = loadImage('assets/windmill_engine.png');
+    imgWindmillProtection = loadImage('assets/windmill_protection.png');
+    imgAlgae = loadImage('assets/algae.png');
+    imgCoralReef = loadImage('assets/coral_reef.png');
+    imgSunkenShip = loadImage('assets/sunken_ship.png');
+    imgKnob = loadImage('assets/knob.png');
+    imgSlider = loadImage('assets/slider.png');
+    imgFish01 = loadImage('assets/fish01.png');
+    imgFish02 = loadImage('assets/fish02.png');
+}
+
+// ===================================================
+// === P5.JS SETUP & MAIN DRAW LOOP
+// ===================================================
+    
+    // Sound wave will be replaced with a PNG. Old procedural code removed.
+        boid.updateState(flock);
+    
+    
+    drawBackground();
+    drawWindmillBase();
+    
+    for(let boid of flock) {
+        if(boid.zIndex === 0) boid.render();
+    }
+    
+    drawWindmillTop();
+
+    for(let boid of flock) {
+        if(boid.zIndex === 1) boid.render();
+    }
+    
+    drawUI();
+
+    knob.updateVisibility(storyStep === 4);
+    if (knob.visible) {
+        knob.display();
+    }
+
+
+// ===================================================
+// === SCENE & BACKGROUND DRAWING FUNCTIONS
+// ===================================================
+
+function drawBackground() {
+    background(SKY_COLOR);
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    fill(MOUNTAIN_COLOR); noStroke();
+    beginShape(); vertex(0, waterLevel); vertex(width*0.1, height*0.3); vertex(width*0.25, height*0.2); vertex(width*0.4, waterLevel); endShape(CLOSE);
+    beginShape(); vertex(width, waterLevel); vertex(width*0.9, height*0.25); vertex(width*0.7, height*0.15); vertex(width*0.6, waterLevel); endShape(CLOSE);
+    // Draw sea PNG overlay
+    if (imgSea) image(imgSea, 0, 0, width, height);
+        // Draw 10 scattered coral PNGs at the bottom
+    if (imgCoralReef) {
+        for (let i = 0; i < 10; i++) {
+            let coralW = random(80, 180);
+            let coralH = random(40, 90);
+            let coralX = random(0, width - coralW);
+            let coralY = height - coralH + random(-10, 10);
+            image(imgCoralReef, coralX, coralY, coralW, coralH);
+        }
+    }
+    // Draw sunken ship PNG
+    if (imgSunkenShip) image(imgSunkenShip, width*0.3, height-100, 160, 80);
+    // Draw 10 scattered algae PNGs of different sizes
+    if (imgAlgae) {
+        for (let i = 0; i < 10; i++) {
+            let algaeW = random(30, 80);
+            let algaeH = random(60, 160);
+            let algaeX = random(0, width - algaeW);
+            let algaeY = height - algaeH + random(-20, 20);
+            image(imgAlgae, algaeX, algaeY, algaeW, algaeH);
+        }
+    }
+}
+
+// ===================================================
+// === WINDMILL DRAWING (SPLIT FOR LAYERING)
+// ===================================================
+
+function drawWindmillBase() {
+    // Draw sound wave PNG at correct position (centered on shaft, 40% lower than water level)
+    if (imgSoundWave) {
+        const waterLevel = height * WATER_LEVEL_RATIO;
+        const towerX = width / 2;
+        const soundWaveW = width * 0.8, soundWaveH = height * 0.3;
+        const soundWaveY = waterLevel + height * 0.4 - soundWaveH/2;
+        image(imgSoundWave, towerX - soundWaveW/2, soundWaveY, soundWaveW, soundWaveH);
+    }
+    if (storyStep < 2) return;
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    const towerX = width / 2;
+    const towerWidthBase = width * 0.05;
+    const towerWidthSurface = width * 0.04;
+
+    // Draw windmill shaft as PNG
+    if (imgWindmillShaft) image(imgWindmillShaft, towerX - width*0.04, waterLevel, width*0.08, height*0.6);
+
+    // Draw windmill protection (sock) as PNG if needed
+    if (storyStep === 4 && imgWindmillProtection) {
+        const sockMaxHeight = height * 0.5;
+        const sockCurrentHeight = sockMaxHeight * knob.value;
+        if (sockCurrentHeight > 0) {
+            const sockWidth = width * 0.09;
+            image(imgWindmillProtection, towerX - sockWidth/2, height - sockCurrentHeight, sockWidth, sockCurrentHeight);
+        }
+    }
+
+    let disturbanceFactor = (storyStep === 4) ? 1.0 - knob.value : 1.0;
+    if (storyStep >= 2 && disturbanceFactor > 0.01) {
+        let currentDisturbance = 1.0;
+        if (storyStep === 2) currentDisturbance = 0.5;
+        if (storyStep === 4) currentDisturbance = disturbanceFactor;
+
+        const shockwaveFrequency = map(currentDisturbance, 1, 0, 90, 180);
+        const shockwaveDuration = 40;
+        
+        if (frameCount % floor(shockwaveFrequency) < shockwaveDuration) {
+            noFill();
+            const progress = (frameCount % floor(shockwaveFrequency)) / shockwaveDuration;
+            const radius = progress * width / 1.5;
+            const alpha = map(progress, 0, 1, 180, 0) * currentDisturbance;
+            const baseWeight = map(progress, 0, 1, 6, 0) * currentDisturbance;
+            
+            // Lower the shockwave center by 40% of the canvas height
+            const shockwaveY = waterLevel + height * 0.4;
+            stroke(255, alpha); strokeWeight(baseWeight); ellipse(towerX, shockwaveY, radius, radius*0.6);
+            stroke(255, alpha*0.8); strokeWeight(baseWeight*0.8); ellipse(towerX, shockwaveY, radius*0.8, radius*0.48);
+        }
+    }
+}
+
+function drawWindmillTop() {
+    if (storyStep < 2) return;
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    const towerX = width / 2;
+    const towerWidthSurface = width * 0.04;
+    const towerWidthTop = width * 0.025;
+    const nacelleY = height * 0.25;
+
+    noStroke();
+    fill(236, 239, 241);
+    quad(towerX - towerWidthTop / 2, nacelleY, towerX + towerWidthTop / 2, nacelleY, towerX + towerWidthSurface / 2, waterLevel, towerX - towerWidthSurface / 2, waterLevel);
+
+    // Draw windmill engine (nacelle) as PNG
+    const nacelleWidth = width * 0.07, nacelleHeight = height * 0.05;
+    if (imgWindmillEngine) image(imgWindmillEngine, towerX - nacelleWidth/2, nacelleY - nacelleHeight, nacelleWidth, nacelleHeight);
+    // Draw windmill blades as PNG, rotating
+    const hubX = towerX, hubY = nacelleY - nacelleHeight/2;
+    if (imgWindmillBlades) {
+        push();
+        translate(hubX, hubY);
+        rotate(frameCount / 200.0);
+        imageMode(CENTER);
+        image(imgWindmillBlades, 0, 0, width * 0.18, width * 0.18);
+        pop();
+    }
+
+    // Removed windmill side part and boat
+}
+
+// ===================================================
+// === UI DRAWING AND MANAGEMENT
+// ===================================================
+
+function createUI() {
+    const sliderWidth = min(width * 0.4, 400);
+    slider = createSlider(1, 4, 1, 1);
+    slider.position(width/2 - sliderWidth/2, height - 45);
+    slider.style('width', `${sliderWidth}px`);
+    
+    homeButton = createButton('Home');
+    homeButton.position(width - 80, 20);
+    homeButton.mousePressed(resetSketch);
+    resetButton = createButton('Reset');
+    resetButton.position(20, 20);
+    resetButton.mousePressed(resetSketch);
+
+    knob = new Knob(120, height * 0.7, 186);
+}
+
+function drawUI() {
+    const barHeight = height * 0.05;
+    // Draw slider as PNG if available
+    if (imgSlider) {
+        image(imgSlider, width/2 - width*0.2, height - barHeight - 10, width*0.4, barHeight);
+    } else {
+        fill(0, 0, 0, 100); noStroke();
+        rect(0, height - barHeight - 10, width, barHeight);
+    }
+    drawSliderIncrements();
+    fill(255); textSize(16); textAlign(CENTER, CENTER);
+    text("", width / 2, height - barHeight / 2 - 10);
+}
+
+function drawSliderIncrements() {
+    noStroke();
+    fill(255, 255, 255, 50);
+    let sliderX = slider.x;
+    let sliderW = slider.width;
+    for (let i = 0; i < 4; i++) {
+        let x = sliderX + (i * sliderW / 3);
+        circle(x, slider.y + 4, 15);
+    }
+}
+
+function resetSketch() { slider.value(1); knob.reset(); }
+
+// ===================================================
+// === FLOCKING SIMULATION (BOIDS)
+// ===================================================
+
+class Boid {
+    constructor(x, y, type, zIndex) {
+        this.position = createVector(x, y);
+        this.velocity = createVector(random(-1, 1), random(-0.4, 0.4));
+        this.acceleration = createVector();
+        this.type = type;
+        this.zIndex = zIndex;
+        
+        if (random() > 0.5) { this.flowDirection = createVector(0.1, 0); } 
+        else { this.flowDirection = createVector(-0.1, 0); }
+
+        if (this.type === 'A') { this.maxSpeed=3; this.maxForce=0.05; this.color=color(FISH_A_COLOR); this.velocity.setMag(random(1.5,3)); } 
+        else { this.maxSpeed=4.5; this.maxForce=0.07; this.color=color(FISH_B_COLOR); this.velocity.setMag(random(3,4.5)); }
+    }
+    
+    updateState(boids) { this.flock(boids); this.update(); this.borders(); }
+    
+    applyForce(force) { this.acceleration.add(force); }
+    update() { this.velocity.add(this.acceleration); this.velocity.limit(this.maxSpeed); this.position.add(this.velocity); this.acceleration.mult(0); }
+    
+    flock(boids) {
+        let sepM=(this.type==='A')?1.5:1.8, aliM=(this.type==='A')?1.0:0.8, cohM=(this.type==='A')?1.0:0.7;
+        this.applyForce(this.separation(boids).mult(sepM));
+        this.applyForce(this.align(boids).mult(aliM));
+        this.applyForce(this.cohesion(boids).mult(cohM));
+        this.applyForce(this.flowDirection);
+        
+        const fleePoint=createVector(width/2,height), fleeRadius=width/2;
+        let baseSpeed=(this.type==='A')?3:4.5, agitatedSpeed=(this.type==='A')?6:7.5, agitatedSpeedMild=(this.type==='A')?4:5.5;
+        
+        if (storyStep === 2) {
+            this.maxSpeed = agitatedSpeedMild;
+            if (p5.Vector.dist(this.position, fleePoint) < fleeRadius) this.applyForce(this.flee(fleePoint).mult(0.5));
+        } else if (storyStep === 3) {
+            this.maxSpeed = agitatedSpeed;
+            if (p5.Vector.dist(this.position, fleePoint) < fleeRadius) this.applyForce(this.flee(fleePoint).mult(2.0));
+        } else if (storyStep === 4) {
+            let disturbanceFactor = 1.0 - knob.value;
+            this.maxSpeed = map(knob.value, 0, 1, agitatedSpeed, baseSpeed);
+            if (p5.Vector.dist(this.position, fleePoint) < fleeRadius) this.applyForce(this.flee(fleePoint).mult(2.0 * disturbanceFactor));
+        } else {
+            this.maxSpeed = baseSpeed;
+        }
+    }
+    
+    // Updated: Prevent boids from reaching above 5% below water level, bounce if hit
+    borders() {
+        const waterLevel = height * WATER_LEVEL_RATIO;
+        const topBound = waterLevel + height * 0.05; // 5% below water level
+        const bottomBound = height * 1.1; // 10% below screen
+        const leftBound = -width * 0.2;  // 20% left of screen
+        const rightBound = width * 1.2;  // 20% right of screen
+
+        if (this.position.x < leftBound) this.position.x = rightBound;
+        if (this.position.x > rightBound) this.position.x = leftBound;
+
+        if (this.position.y < topBound) {
+            this.position.y = topBound;
+            if (this.velocity.y < 0) {
+                this.velocity.y *= -0.2; // even softer bounce
+                this.velocity.y += random(0.5, 2.5); // add random downward velocity to scatter
+                this.velocity.x += random(-1, 1); // add some horizontal scatter
+            }
+        }
+        if (this.position.y > bottomBound) {
+            this.position.y = bottomBound;
+            if (this.velocity.y > 0) this.velocity.y *= -0.7;
+        }
+    }
+
+    render() {
+        // Draw fish as PNGs
+        let fishImg = (this.type === 'A') ? imgFish01 : imgFish02;
+        let size = (this.type === 'A') ? 48 : 36;
+        push();
+        translate(this.position.x, this.position.y);
+        rotate(this.velocity.heading());
+        imageMode(CENTER);
+        if (fishImg) image(fishImg, 0, 0, size*2.5, size*1.5);
+        pop();
+    }
+    seek(target) { return p5.Vector.sub(target, this.position).setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce); }
+    flee(target) { return this.seek(target).mult(-1); }
+    separation(boids) { let d_sep=25.0, s=createVector(0,0), c=0; for(let o of boids){ let d=p5.Vector.dist(this.position,o.position); if((d>0)&&(d<d_sep)){s.add(p5.Vector.sub(this.position,o.position).normalize().div(d));c++;}} if(c>0) s.div(c); if(s.mag()>0) s.setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce); return s; }
+    align(boids) { let n_dist=50, sum=createVector(0,0), c=0; for(let o of boids){ if(o!==this && p5.Vector.dist(this.position, o.position)<n_dist){sum.add(o.velocity);c++;}} return c>0 ? sum.div(c).setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce):createVector(0,0);}
+    cohesion(boids) { let n_dist=50, sum=createVector(0,0), c=0; for(let o of boids){ if(o!==this && p5.Vector.dist(this.position, o.position)<n_dist){sum.add(o.position);c++;}} return c>0 ? this.seek(sum.div(c)):createVector(0,0);}
+}
+
+// ===================================================
+// === KNOB CLASS & MOUSE INTERACTIONS
+// ===================================================
+class Knob {
+    constructor(x, y, size) { this.x=x;this.y=y;this.size=size;this.value=0;this.angle=-PI/2;this.isDragging=false;this.visible=false; }
+    updateVisibility(v) { this.visible = v; }
+    handleDrag() { if(this.visible&&dist(mouseX,mouseY,this.x,this.y)<this.size/2) this.isDragging=true; }
+    drag() { if(this.isDragging){this.angle+= (mouseX - pmouseX)*0.05;this.angle=constrain(this.angle,-PI/2,PI*1.5);this.value=map(this.angle,-PI/2,PI*1.5,0,1);}}
+    stopDrag() { this.isDragging = false; }
+    reset() { this.angle = -PI / 2; this.value = 0; }
+    display() {
+        // Draw knob as PNG if available
+        push();
+        if (imgKnob) {
+            image(imgKnob, this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+        } else {
+            const barWidth = this.size * 0.8;
+            const barHeight = 10;
+            const barX = this.x - barWidth / 2;
+            const barY = this.y - this.size / 2 - 20;
+            noStroke();
+            fill(50, 50, 50, 150);
+            rect(barX, barY, barWidth, barHeight, 5);
+            fill(SOCK_COLOR);
+            const filledWidth = barWidth * this.value;
+            rect(barX, barY, filledWidth, barHeight, 5);
+            translate(this.x, this.y); rotate(this.angle);
+            stroke(40); strokeWeight(3); fill(150);
+            for(let i=0;i<3;i++){rectMode(CORNER);rect(-this.size*0.05, -this.size*0.1, this.size*0.1, this.size/2);rotate(TWO_PI/3);}
+            fill(80); noStroke(); circle(0, 0, this.size/4);
+        }
+        pop();
+    }
+}
+
+function mousePressed() { knob.handleDrag(); }
+function mouseDragged() { knob.drag(); }
+function mouseReleased() { knob.stopDrag(); }
+
+// ===================================================
+// === RESPONSIVE DESIGN
+// ===================================================
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+    const sliderWidth = min(width*0.4, 400);
+    slider.position(width/2 - sliderWidth/2, height - 45);
+    slider.style('width', `${sliderWidth}px`);
+    homeButton.position(width - 80, 20);
+    resetButton.position(20, 20);
+    knob.x = 120; 
+    knob.y = height * 0.7;
+}
+</script>
+</body>
+</html>

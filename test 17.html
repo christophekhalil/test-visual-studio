@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Ocean Scene (Final Version)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
+</head>
+<body>
+<script>
+// ===================================================
+// === GLOBAL VARIABLES & CONFIGURATION
+// ===================================================
+let storyStep = 1;
+let slider, homeButton, resetButton, knob;
+let flock = [];
+const numBoids = 250;
+
+const WATER_LEVEL_RATIO = 0.45;
+
+// Color Palette
+const SKY_COLOR = '#E0F7FA';
+const WATER_COLOR = '#42A5F5';
+const DEEP_WATER_COLOR = '#1E88E5';
+const MOUNTAIN_COLOR = '#B0BEC5';
+const TURBINE_COLOR = '#B0BEC5';
+const SOCK_COLOR = '#66BB6A';
+const FISH_A_COLOR = '#455A64';
+const FISH_B_COLOR = '#78909C';
+
+// For dynamic top boundary
+let noiseOffsetX = 0;
+
+// ===================================================
+// === P5.JS SETUP & MAIN DRAW LOOP
+// ===================================================
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    createUI();
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    const fishTopBoundary = waterLevel + (height - waterLevel) * 0.25;
+    
+    for (let i = 0; i < numBoids; i++) {
+        const startX = random(width);
+        const startY = random(fishTopBoundary, height - 50);
+        const zIndex = (random() > 0.5) ? 1 : 0;
+        
+        if (i < 160) { flock.push(new Boid(startX, startY, 'A', zIndex)); } 
+        else { flock.push(new Boid(startX, startY, 'B', zIndex)); }
+    }
+}
+
+function draw() {
+    storyStep = slider.value();
+    
+    // Update the dynamic boundary wave
+    noiseOffsetX += 0.002;
+
+    for(let boid of flock) {
+        boid.updateState(flock);
+    }
+    
+    drawBackground();
+    drawWindmillBase();
+    
+    for(let boid of flock) {
+        if(boid.zIndex === 0) boid.render();
+    }
+    
+    drawWindmillTop();
+
+    for(let boid of flock) {
+        if(boid.zIndex === 1) boid.render();
+    }
+    
+    drawUI();
+
+    knob.updateVisibility(storyStep === 4);
+    if (knob.visible) {
+        knob.display();
+    }
+}
+
+// ===================================================
+// === SCENE & BACKGROUND DRAWING FUNCTIONS
+// ===================================================
+
+function drawBackground() {
+    background(SKY_COLOR);
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    fill(MOUNTAIN_COLOR); noStroke();
+    beginShape(); vertex(0, waterLevel); vertex(width*0.1, height*0.3); vertex(width*0.25, height*0.2); vertex(width*0.4, waterLevel); endShape(CLOSE);
+    beginShape(); vertex(width, waterLevel); vertex(width*0.9, height*0.25); vertex(width*0.7, height*0.15); vertex(width*0.6, waterLevel); endShape(CLOSE);
+    const c1=color(WATER_COLOR), c2=color(DEEP_WATER_COLOR);
+    for(let y=waterLevel; y<height; y++){ const inter=map(y,waterLevel,height,0,1); stroke(lerpColor(c1,c2,inter)); line(0,y,width,y); }
+}
+
+// ===================================================
+// === WINDMILL DRAWING (SPLIT FOR LAYERING)
+// ===================================================
+
+function drawWindmillBase() {
+    if (storyStep < 2) return;
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    const towerX = width / 2;
+    const towerWidthBase = width * 0.05;
+    const towerWidthSurface = width * 0.04;
+
+    noStroke();
+    fill(TURBINE_COLOR);
+    quad(towerX - towerWidthSurface / 2, waterLevel, towerX + towerWidthSurface / 2, waterLevel, towerX + towerWidthBase / 2, height, towerX - towerWidthBase / 2, height);
+
+    if (storyStep === 4) {
+        const sockMaxHeight = height * 0.5;
+        const sockCurrentHeight = sockMaxHeight * knob.value;
+        if (sockCurrentHeight > 0) {
+            const sockWidth = towerWidthBase + 10; const sockX = towerX - sockWidth / 2;
+            fill(SOCK_COLOR); noStroke();
+            rect(sockX, height - sockCurrentHeight, sockWidth, sockCurrentHeight);
+            stroke(90, 160, 90, 200); strokeWeight(2);
+            for (let i = 1; i < 4; i++) { const lineX = sockX + i * (sockWidth/4); line(lineX, height - sockCurrentHeight, lineX, height); }
+        }
+    }
+
+    let disturbanceFactor = (storyStep === 4) ? 1.0 - knob.value : 1.0;
+    if (storyStep >= 2 && disturbanceFactor > 0.01) {
+        let currentDisturbance = 1.0;
+        if (storyStep === 2) currentDisturbance = 0.5;
+        if (storyStep === 4) currentDisturbance = disturbanceFactor;
+
+        const shockwaveFrequency = map(currentDisturbance, 1, 0, 90, 180);
+        const shockwaveDuration = 40;
+        
+        if (frameCount % floor(shockwaveFrequency) < shockwaveDuration) {
+            noFill();
+            const progress = (frameCount % floor(shockwaveFrequency)) / shockwaveDuration;
+            const radius = progress * width / 1.5;
+            const alpha = map(progress, 0, 1, 180, 0) * currentDisturbance;
+            const baseWeight = map(progress, 0, 1, 6, 0) * currentDisturbance;
+            
+            stroke(255, alpha); strokeWeight(baseWeight); ellipse(towerX, height, radius, radius*0.6);
+            stroke(255, alpha*0.8); strokeWeight(baseWeight*0.8); ellipse(towerX, height, radius*0.8, radius*0.48);
+        }
+    }
+}
+
+function drawWindmillTop() {
+    if (storyStep < 2) return;
+    const waterLevel = height * WATER_LEVEL_RATIO;
+    const towerX = width / 2;
+    const towerWidthSurface = width * 0.04;
+    const towerWidthTop = width * 0.025;
+    const nacelleY = height * 0.25;
+
+    noStroke();
+    fill(236, 239, 241);
+    quad(towerX - towerWidthTop / 2, nacelleY, towerX + towerWidthTop / 2, nacelleY, towerX + towerWidthSurface / 2, waterLevel, towerX - towerWidthSurface / 2, waterLevel);
+
+    const nacelleWidth = width * 0.07; const nacelleHeight = height * 0.05;
+    fill('#B0BEC5'); stroke('#78909C'); strokeWeight(1);
+    rect(towerX - nacelleWidth/2, nacelleY - nacelleHeight, nacelleWidth, nacelleHeight, 4);
+    const hubX = towerX; const hubY = nacelleY - nacelleHeight/2;
+    fill(245); noStroke(); ellipse(hubX, hubY, width*0.025, width*0.025);
+
+    push();
+    translate(hubX, hubY);
+    rotate(frameCount / 200.0);
+    for (let i = 0; i < 3; i++) {
+        rotate(TWO_PI / 3);
+        fill(245); stroke(220); strokeWeight(1);
+        beginShape();
+        vertex(0, 0);
+        bezierVertex(-15, -height*0.1, -10, -height*0.2, 0, -height*0.22);
+        bezierVertex(10, -height*0.2, 15, -height*0.1, 0, 0);
+        endShape(CLOSE);
+    }
+    pop();
+
+    if(storyStep >= 2){
+        noStroke(); fill(240); const boatWidth = 80; const boatX = towerX - (towerWidthSurface/2) - boatWidth - 10;
+        rect(boatX, waterLevel-20, boatWidth, 20); fill(224); rect(boatX + 10, waterLevel - 30, boatWidth-20, 10);
+        stroke(TURBINE_COLOR); strokeWeight(4); line(boatX+40, waterLevel-30, towerX, waterLevel+20);
+        noStroke(); fill(TURBINE_COLOR); rect(towerX - 10, sin(frameCount*0.1)*10 + (waterLevel+45), 20, 15);
+    }
+}
+
+// ===================================================
+// === UI DRAWING AND MANAGEMENT
+// ===================================================
+
+function createUI() {
+    const sliderWidth = min(width * 0.4, 400);
+    slider = createSlider(1, 4, 1, 1);
+    slider.position(width/2 - sliderWidth/2, height - 45);
+    slider.style('width', `${sliderWidth}px`);
+    
+    homeButton = createButton('Home');
+    homeButton.position(width - 80, 20);
+    homeButton.mousePressed(resetSketch);
+    resetButton = createButton('Reset');
+    resetButton.position(20, 20);
+    resetButton.mousePressed(resetSketch);
+
+    knob = new Knob(120, height * 0.7, 186);
+}
+
+function drawUI() {
+    const barHeight = height * 0.05;
+    fill(0, 0, 0, 100); noStroke();
+    rect(0, height - barHeight - 10, width, barHeight);
+    
+    drawSliderIncrements();
+
+    fill(255); textSize(16); textAlign(CENTER, CENTER);
+    text("", width / 2, height - barHeight / 2 - 10);
+}
+
+function drawSliderIncrements() {
+    noStroke();
+    fill(255, 255, 255, 50);
+    let sliderX = slider.x;
+    let sliderW = slider.width;
+    for (let i = 0; i < 4; i++) {
+        let x = sliderX + (i * sliderW / 3);
+        circle(x, slider.y + 4, 15);
+    }
+}
+
+function resetSketch() { slider.value(1); knob.reset(); }
+
+// ===================================================
+// === FLOCKING SIMULATION (BOIDS)
+// ===================================================
+
+class Boid {
+    constructor(x, y, type, zIndex) {
+        this.position = createVector(x, y);
+        this.velocity = createVector(random(-1, 1), random(-0.4, 0.4));
+        this.acceleration = createVector();
+        this.type = type;
+        this.zIndex = zIndex;
+
+        if (this.type === 'A') { this.maxSpeed=3; this.maxForce=0.05; this.color=color(FISH_A_COLOR); this.velocity.setMag(random(1.5,3)); } 
+        else { this.maxSpeed=4.5; this.maxForce=0.07; this.color=color(FISH_B_COLOR); this.velocity.setMag(random(3,4.5)); }
+    }
+    
+    updateState(boids) { this.flock(boids); this.update(); this.borders(); }
+    
+    applyForce(force) { this.acceleration.add(force); }
+    update() { this.velocity.add(this.acceleration); this.velocity.limit(this.maxSpeed); this.position.add(this.velocity); this.acceleration.mult(0); }
+    
+    flock(boids) {
+        let sepM=(this.type==='A')?1.5:1.8, aliM=(this.type==='A')?1.0:0.8, cohM=(this.type==='A')?1.0:0.7;
+        this.applyForce(this.separation(boids).mult(sepM)); this.applyForce(this.align(boids).mult(aliM)); this.applyForce(this.cohesion(boids).mult(cohM));
+        
+        this.applyBoundaryForces();
+
+        const fleePoint=createVector(width/2,height), fleeRadius=width/2;
+        let baseSpeed=(this.type==='A')?3:4.5, agitatedSpeed=(this.type==='A')?6:7.5, agitatedSpeedMild=(this.type==='A')?4:5.5;
+        
+        if (storyStep === 2) {
+            this.maxSpeed = agitatedSpeedMild;
+            if (p5.Vector.dist(this.position, fleePoint) < fleeRadius) this.applyForce(this.flee(fleePoint).mult(0.5));
+        } else if (storyStep === 3) {
+            this.maxSpeed = agitatedSpeed;
+            if (p5.Vector.dist(this.position, fleePoint) < fleeRadius) this.applyForce(this.flee(fleePoint).mult(2.0));
+        } else if (storyStep === 4) {
+            let disturbanceFactor = 1.0 - knob.value;
+            this.maxSpeed = map(knob.value, 0, 1, agitatedSpeed, baseSpeed);
+            if (p5.Vector.dist(this.position, fleePoint) < fleeRadius) this.applyForce(this.flee(fleePoint).mult(2.0 * disturbanceFactor));
+        } else {
+            this.maxSpeed = baseSpeed;
+        }
+    }
+
+    applyBoundaryForces() {
+        // MODIFIED: Calculate dynamic, wavy top boundary
+        const waterLevel = height * WATER_LEVEL_RATIO;
+        const baseFishTop = waterLevel + (height - waterLevel) * 0.25;
+        const waveHeight = 50;
+        // The noise function creates a smooth, random-like wave.
+        const wave = map(noise(this.position.x * 0.005, noiseOffsetX), 0, 1, -waveHeight, waveHeight);
+        const fishTopBoundary = baseFishTop + wave;
+
+        const repulsionZone = 80;
+        const topSoftWall = fishTopBoundary + repulsionZone;
+
+        if (this.position.y < topSoftWall) {
+            let distance = topSoftWall - this.position.y;
+            let repulsionStrength = map(distance, 0, repulsionZone, 0.2, 0);
+            let downwardForce = createVector(0, this.maxForce * repulsionStrength);
+            this.applyForce(downwardForce);
+        }
+    }
+    
+    // MODIFIED: Smooth exit and re-entry
+    borders() {
+        const r = 10;
+        const waterLevel = height * WATER_LEVEL_RATIO;
+        const fishTopBoundary = waterLevel + (height - waterLevel) * 0.25;
+
+        // Wrap left and right
+        if (this.position.x < -r) this.position.x = width + r;
+        if (this.position.x > width + r) this.position.x = -r;
+
+        // Wrap from the bottom, re-entering from the sides
+        if (this.position.y > height + r) {
+            // Re-enter from left or right side, within the vertical habitat zone
+            this.position.y = random(fishTopBoundary, height);
+            if(random() > 0.5) {
+                this.position.x = -r; // Re-enter from left
+            } else {
+                this.position.x = width + r; // Re-enter from right
+            }
+        }
+        
+        // Prevent getting stuck below the soft wall (final safety net)
+        if (this.position.y < fishTopBoundary) {
+            this.position.y = fishTopBoundary;
+        }
+    }
+
+    render() {
+        const waterLevel = height * WATER_LEVEL_RATIO;
+        let size = map(this.position.y, waterLevel, height, 4, 12);
+        
+        if (this.type === 'B') {
+            size *= 0.7;
+        }
+
+        push();
+        translate(this.position.x, this.position.y);
+        rotate(this.velocity.heading());
+        noStroke();
+        fill(this.color);
+        const bodyWidth = size * 2.5;
+        const bodyHeight = size * 1.5;
+        ellipse(0, 0, bodyWidth, bodyHeight);
+        triangle(-bodyWidth/2, 0, -bodyWidth*0.9, -bodyHeight/2, -bodyWidth*0.9, bodyHeight/2);
+        pop();
+    }
+    seek(target) { return p5.Vector.sub(target, this.position).setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce); }
+    flee(target) { return this.seek(target).mult(-1); }
+    separation(boids) { let d_sep=25.0, s=createVector(0,0), c=0; for(let o of boids){ let d=p5.Vector.dist(this.position,o.position); if((d>0)&&(d<d_sep)){s.add(p5.Vector.sub(this.position,o.position).normalize().div(d));c++;}} if(c>0) s.div(c); if(s.mag()>0) s.setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce); return s; }
+    align(boids) { let n_dist=50, sum=createVector(0,0), c=0; for(let o of boids){ if(o!==this && p5.Vector.dist(this.position, o.position)<n_dist){sum.add(o.velocity);c++;}} return c>0 ? sum.div(c).setMag(this.maxSpeed).sub(this.velocity).limit(this.maxForce):createVector(0,0);}
+    cohesion(boids) { let n_dist=50, sum=createVector(0,0), c=0; for(let o of boids){ if(o!==this && p5.Vector.dist(this.position, o.position)<n_dist){sum.add(o.position);c++;}} return c>0 ? this.seek(sum.div(c)):createVector(0,0);}
+}
+
+// ===================================================
+// === KNOB CLASS & MOUSE INTERACTIONS
+// ===================================================
+class Knob {
+    constructor(x, y, size) { this.x=x;this.y=y;this.size=size;this.value=0;this.angle=-PI/2;this.isDragging=false;this.visible=false; }
+    updateVisibility(v) { this.visible = v; }
+    handleDrag() { if(this.visible&&dist(mouseX,mouseY,this.x,this.y)<this.size/2) this.isDragging=true; }
+    drag() { if(this.isDragging){this.angle+= (mouseX - pmouseX)*0.05;this.angle=constrain(this.angle,-PI/2,PI*1.5);this.value=map(this.angle,-PI/2,PI*1.5,0,1);}}
+    stopDrag() { this.isDragging = false; }
+    reset() { this.angle = -PI / 2; this.value = 0; }
+    display() {
+        push();
+        const barWidth = this.size * 0.8;
+        const barHeight = 10;
+        const barX = this.x - barWidth / 2;
+        const barY = this.y - this.size / 2 - 20;
+        noStroke();
+        fill(50, 50, 50, 150);
+        rect(barX, barY, barWidth, barHeight, 5);
+        fill(SOCK_COLOR);
+        const filledWidth = barWidth * this.value;
+        rect(barX, barY, filledWidth, barHeight, 5);
+
+        translate(this.x, this.y); rotate(this.angle);
+        stroke(40); strokeWeight(3); fill(150);
+        for(let i=0;i<3;i++){rectMode(CORNER);rect(-this.size*0.05, -this.size*0.1, this.size*0.1, this.size/2);rotate(TWO_PI/3);}
+        fill(80); noStroke(); circle(0, 0, this.size/4);
+        pop();
+    }
+}
+
+function mousePressed() { knob.handleDrag(); }
+function mouseDragged() { knob.drag(); }
+function mouseReleased() { knob.stopDrag(); }
+
+// ===================================================
+// === RESPONSIVE DESIGN
+// ===================================================
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+    const sliderWidth = min(width*0.4, 400);
+    slider.position(width/2 - sliderWidth/2, height - 45);
+    slider.style('width', `${sliderWidth}px`);
+    homeButton.position(width - 80, 20);
+    resetButton.position(20, 20);
+    knob.x = 120; 
+    knob.y = height * 0.7;
+}
+</script>
+</body>
+</html>
