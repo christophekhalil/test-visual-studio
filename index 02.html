@@ -6,6 +6,7 @@
     <title>Interactive Ocean Scene (Final Version)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
     <style>
         html, body { margin: 0; padding: 0; overflow: hidden; }
     </style>
@@ -60,16 +61,29 @@ function draw() {
     knobLeft.updateVisibility(false);
     knobRight.updateVisibility(false);
 
-    // ...existing code...
     // Draw sea PNG overlay in front of everything
     if (imgSea) image(imgSea, 0, 0, width, height);
 
-    // --- Crossfade ocean sounds based on agitation ---
-    if (soundReady) {
-        // Use knob.value for agitation (0 = calm, 1 = agitated)
-        let agitation = knob ? knob.value : 0;
-        let calmVol = 1 - agitation;
-        let bruyantVol = agitation;
+    // --- Crossfade ocean sounds based on slider ---
+    if (soundReady && slider) {
+        // Map slider.value() from [1,4] to [0,1]
+        let t = map(slider.value(), 1, 4, 0, 1);
+        t = constrain(t, 0, 1);
+        t2 = (knob.value + t) /2 ;
+        console.log(t2);
+        let calmVol = t2;
+        let bruyantVol = 1-t2;
+        if (knob.visible){
+
+               calmVol = t2;
+         bruyantVol = 1-t2;
+
+        }
+        else{
+            calmVol = 1-t2;
+            bruyantVol = t2;
+        }
+      
         sndCalm.setVolume(calmVol, 0.2); // fade time 0.2s
         sndBruyant.setVolume(bruyantVol, 0.2);
     }
@@ -467,13 +481,13 @@ class Knob {
     constructor(x, y, size) { this.x=x;this.y=y;this.size=size;this.value=0;this.angle=-PI/2;this.isDragging=false;this.visible=false; }
     updateVisibility(v) { this.visible = v; }
     handleDrag() { if(this.visible&&dist(mouseX,mouseY,this.x,this.y)<this.size/2) this.isDragging=true; }
-    drag() { 
-        if(this.isDragging)
-        {
-            // this.angle += (mouseX - pmouseX)*0.05;
-            // this.angle = constrain(this.angle,-PI/2,PI*1.5);
 
-            // this.value = map(this.angle,-PI/2,PI*1.5,0,1);
+    drag() { 
+        if(this.isDragging) {
+            this.angle += (mouseX - pmouseX) * 0.05;
+            this.angle = constrain(this.angle, -PI/2, PI*1.5);
+            this.value = map(this.angle, -PI/2, PI*1.5, 0, 1);
+            this.value = constrain(this.value, 0, 1);
         }
     }
     stopDrag() { this.isDragging = false; }
