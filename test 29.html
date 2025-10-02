@@ -51,7 +51,6 @@ function draw() {
     knobLeft.updateVisibility(false);
     knobRight.updateVisibility(false);
 
-    // ...existing code...
     // Draw sea PNG overlay in front of everything
     if (imgSea) image(imgSea, 0, 0, width, height);
 }
@@ -84,6 +83,10 @@ let imgSeaFloor, imgSeaSand;
 // Image variable for sound wave PNG
 let imgSoundWave;
 
+// Sound variables
+let sndCalm, sndBruyant;
+let soundReady = false;
+
 function preload() {
     imgMountain = loadImage('assets/mountain.png');
     imgSoundWave = loadImage('assets/sound_wave.png');
@@ -101,6 +104,10 @@ function preload() {
     imgFish02 = loadImage('assets/fish02.png');
     imgSeaFloor = loadImage('assets/sea_floor.png');
     imgSeaSand = loadImage('assets/sea_sand.png');
+    // Load sounds
+    soundFormats('mp3');
+    sndCalm = loadSound('assets/ocean_calme_VF.mp3');
+    sndBruyant = loadSound('assets/ocean_bruyant_VF.mp3');
 }
 
 
